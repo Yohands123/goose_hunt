@@ -1,4 +1,4 @@
-FROM rust:1.82-slim AS build
+FROM rust:1.75-slim AS build
 WORKDIR /src
 COPY engine/ .
 RUN cargo build --release --bin goose-engine

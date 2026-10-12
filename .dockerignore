@@ -1,0 +1,9 @@
+# Build contexts copy whole folders; keep host-built and platform-specific files out.
+**/node_modules
+**/.next
+**/dist
+**/*.tsbuildinfo
+engine/target
+data/gtfs
+.git
+.env*

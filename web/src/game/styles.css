@@ -55,7 +55,7 @@
   background: radial-gradient(ellipse at 50% 45%, var(--gt-sea) 0%, var(--gt-sea-deep) 75%); user-select: none; -webkit-user-select: none; }
 .gt * { box-sizing: border-box; }
 .gt button { font: inherit; color: inherit; cursor: pointer; }
-.gt button:focus-visible, .gt [tabindex]:focus-visible { outline: 3px solid var(--gt-gold); outline-offset: 2px; }
+.gt button:focus-visible, .gt [tabindex]:focus-visible { outline: 3px solid var(--gt-accent); outline-offset: 2px; }
 
 /* ---------- map ---------- */
 .gt-map { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; display: block; }
