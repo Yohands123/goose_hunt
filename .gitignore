@@ -1,0 +1,8 @@
+node_modules/
+engine/target/
+data/gtfs/
+web/.next/
+web/dist/
+web/next-env.d.ts
+*.tsbuildinfo
+.env*

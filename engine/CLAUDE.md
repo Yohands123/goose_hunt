@@ -1,0 +1,25 @@
+# engine/ (Rust)
+
+You own this folder. Polygon geofence lookups, served over HTTP, plus a benchmark.
+
+- `src/lib.rs`: projection, `Polygon`, `GeofenceIndex` (uniform grid of cells → candidate polygons).
+- `src/main.rs`: axum server, `POST /v1/locate`, `GET /health`. Port from `PORT` (7070), data from `MAP_DATA`.
+- `src/bin/bench.rs`: 24 neighbourhoods + a 75 m geofence per bus stop (~1,500 total), indexed vs brute force.
+
+## Checks (run before finishing)
+
+```bash
+cargo build --release && cargo test --release && ./target/release/bench
+```
+
+Last measured on 1 core: brute force ~232k lookups/s, grid index ~5.9M lookups/s (26x).
+If you change the index, rerun the bench and update this line and the README.
+
+## Rules
+
+- Toolchain is Rust 1.75. Dependencies are pinned in Cargo.toml/Cargo.lock; check MSRV before upgrading
+  (`hyper-util` was pinned to 0.1.10 for this reason).
+- The projection constants must match `web/src/game/geo.ts` exactly.
+- The response shape of `/v1/locate` is a contract (`docs/CONTRACTS.md`). Additive fields only.
+- No allocations inside the lookup loop; keep `locate` returning references.
+- Keep `index_matches_brute_force` passing; it's the safety net for any index change.
