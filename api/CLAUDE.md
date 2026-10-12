@@ -13,6 +13,7 @@ You own this folder. Fastify service that turns GPS fixes into game events.
 
 ```bash
 npm run typecheck
+npm test               # src/*.test.ts (track.ts game logic); needs no Redis, Mongo or engine
 npm run dev            # then: curl localhost:8080/health
 npm run loadtest -- 1000 15 8
 ```

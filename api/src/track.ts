@@ -21,6 +21,15 @@ export interface DeviceState {
   claimed: string[]; visits: Record<string, number>;
 }
 
+/**
+ * Pass 0: the fixes this request can still apply, oldest first. Fixes at or before the last
+ * processed fix for the same zone are dropped (GPS buffers sometimes resend old fixes).
+ */
+export function freshFixes(state: DeviceState | null, req: TrackRequest): Fix[] {
+  const sorted = [...req.fixes].sort((a, b) => a.t - b.t);
+  return state && state.zone.id === req.zone.id ? sorted.filter((f) => f.t > state.lastT) : sorted;
+}
+
 /** Pass 1: smooth the fixes. The caller looks up territories for the smoothed points. */
 export function smooth(state: DeviceState | null, req: TrackRequest) {
   const first = req.fixes[0];
@@ -70,7 +79,11 @@ export function applyHits(state: DeviceState | null, req: TrackRequest, sm: Retu
     const inside = zone.contains(out.p);
     if (inside !== s.inZone) { s.inZone = inside; s.outsideSince = inside ? null : f.t; emit(inside ? "zone_enter" : "zone_exit", f.t, at, { zone: zone.name }); }
     if (inside) s.health = Math.min(100, s.health + REGEN_PER_S * dt);
-    else if (s.outsideSince !== null && f.t - s.outsideSince > GRACE_S) s.health = Math.max(0, s.health - DRAIN_PER_S * dt);
+    else if (s.outsideSince !== null) {
+      // only the part of dt that is past the grace period drains (fixes can be far apart)
+      const pastGrace = f.t - s.outsideSince - GRACE_S;
+      if (pastGrace > 0) s.health = Math.max(0, s.health - DRAIN_PER_S * Math.min(dt, pastGrace));
+    }
     if (s.health <= 0 && !s.fainted) { s.fainted = true; emit("fainted", f.t, at, { zone: zone.name }); }
     if (s.health > 0) s.fainted = false;
   });
