@@ -1,3 +1,5 @@
+**Play it live: https://goose-hunt-gold.vercel.app** (runs in your browser, nothing to install)
+
 # Goose Turf
 
 A live board-game map of Kitchener, Waterloo and Cambridge. Gus the goose moves around the region,
@@ -19,6 +21,15 @@ classification, a spatial index in Rust, and a tracking API with Redis and Mongo
 - **Nearby.** ION stations, 1,471 bus stops and landmarks within 600 m, found through a spatial grid.
 - **Real transit data.** ION line, stations and bus routes come from Grand River Transit's GTFS feed.
 
+## What to try
+
+1. **Switch off GPS smoothing** (gold card, bottom right). Raw fixes make Gus twitch between poses and
+   flicker across borders, and the flip counter climbs. Switch it back on and the flips stop.
+2. **Claim a neighbourhood.** Drag Gus (or use the arrow keys) across a border and open the Events tab:
+   you'll see the exit and enter events. Leave him there for 3 seconds (3 game minutes) to claim it.
+3. **Play hard mode.** Click the home-zone chip at the top left, pick a street under "Streets (harder)", then
+   hold Shift and an arrow key to drive Gus off it. After a 4-second grace period his health drains until he faints.
+
 ## Architecture
 
 ```
@@ -33,16 +44,22 @@ The smoothing and geofence code in `web/src/game/engine.ts` is shared by the bro
 
 ## Numbers
 
-Measured on a single shared CPU core (so these are conservative):
+Measured on one CPU core of a desktop PC. For the load test, every service and the load generator were
+pinned to that same core under Docker, so they compete with each other.
 
 | What | Result |
 |---|---|
-| Rust lookups, 1,495 polygon geofences, brute force | ~232,000 / s |
-| Rust lookups, grid index | ~5,900,000 / s (26x faster) |
-| Full API (Redis + Rust engine), 1,000 devices, 8 in flight | 1,631 fixes/s, p50 18.6 ms, p99 92 ms |
-| Same, 64 in flight | 1,791 fixes/s |
+| Rust lookups, 1,495 polygon geofences, brute force | ~280,000 / s |
+| Rust lookups, grid index | ~8,200,000 / s (29x faster) |
+| Lookup time inside the running engine, under load (`GET /v1/stats`) | ~340 ns per point |
+| Full stack (API + Rust engine + Redis + MongoDB), 1,000 devices, 8 requests in flight | ~4,600 fixes/s, p50 7.5 ms, p99 26 ms |
+| Same, 64 requests in flight | ~5,300 fixes/s, p50 53 ms, p99 ~140 ms |
+| Automated tests | 17 for the tracking logic (`api`), 5 for the engine |
 
-Reproduce: `cd engine && cargo run --release --bin bench` and `cd api && npm run loadtest -- 1000 15 8`.
+Load-test figures are from warm runs. The first run after a cold start is slower (~3,200 fixes/s at 8 in flight).
+
+Reproduce: `cd engine && cargo run --release --bin bench`, then `docker compose up -d`,
+`docker update --cpuset-cpus 0 $(docker compose ps -q)` and `cd api && npm run loadtest -- 1000 15 8`.
 
 ## Run it
 

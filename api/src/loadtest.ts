@@ -2,9 +2,11 @@
 // npx tsx src/loadtest.ts [devices=1000] [seconds=20] [inFlight=64] [fixesPerRequest=5]
 const [devices = 1000, seconds = 20, inFlight = 64, perReq = 5] = process.argv.slice(2).map(Number);
 const API = process.env.API_URL ?? "http://localhost:8080";
+// fresh device ids per run: reused ids would resend already-processed timestamps, which the API skips cheaply
+const run = Date.now().toString(36);
 
 const geese = Array.from({ length: devices }, (_, i) => ({
-  id: `load-${i}`, lat: 43.40 + Math.random() * 0.1, lon: -80.56 + Math.random() * 0.14, t: 8 * 3600,
+  id: `load-${run}-${i}`, lat: 43.40 + Math.random() * 0.1, lon: -80.56 + Math.random() * 0.14, t: 8 * 3600,
   heading: Math.random() * Math.PI * 2, zone: { kind: "city", id: ["waterloo", "kitchener", "cambridge"][i % 3] },
 }));
 const lat: number[] = [];

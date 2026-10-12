@@ -18,8 +18,11 @@ npm run dev            # then: curl localhost:8080/health
 npm run loadtest -- 1000 15 8
 ```
 
-Last measured, everything on one shared core (API + Rust engine + Redis + load generator):
-8 in flight → 326 req/s, 1,631 fixes/s, p50 18.6 ms, p99 92 ms. 64 in flight → 1,791 fixes/s.
+Last measured 2026-10-12, warm runs, everything pinned to one core under Docker
+(`docker update --cpuset-cpus 0 $(docker compose ps -q)`; API + Rust engine + Redis + MongoDB + load generator):
+8 in flight → ~915 req/s, ~4,600 fixes/s, p50 7.5 ms, p99 26 ms. 64 in flight → ~1,060 req/s, ~5,300 fixes/s, p50 53 ms, p99 ~140 ms.
+Each run uses fresh device ids; reusing ids replays old timestamps, which the API skips without calling the engine.
+Sanity check: the engine's `GET /v1/stats` requests count should rise by the run's ok count.
 Update these if you change the hot path.
 
 ## Rules

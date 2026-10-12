@@ -15,7 +15,7 @@ You own this folder. Polygon geofence lookups, served over HTTP, plus a benchmar
 cargo build --release && cargo test --release && ./target/release/bench
 ```
 
-Last measured on 1 core: brute force ~232k lookups/s, grid index ~5.9M lookups/s (26x).
+Last measured on 1 core (2026-10-12): brute force ~280k lookups/s, grid index ~8.2M lookups/s (29x).
 If you change the index, rerun the bench and update this line and the README.
 
 ## Rules
