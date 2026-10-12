@@ -37,6 +37,7 @@ const ICONS = {
 };
 const SVGNS = "http://www.w3.org/2000/svg";
 const STORE_KEY = "goose-turf:v1";
+const INTRO_KEY = "goose-turf:intro-dismissed";
 
 export interface MountOptions { apiBase?: string; deviceId?: string }
 
@@ -424,7 +425,7 @@ export function mount(root: HTMLElement, data: MapData, opts: MountOptions = {})
     if (lastAvatar !== gooseState) { $("avatar").innerHTML = gooseSvg(gooseState); lastAvatar = gooseState; }
     const now = performance.now();
     while (flips.length && now - flips[0] > 60_000) flips.shift();
-    $("flips").textContent = `${flips.length} icon or border flips in the last minute`;
+    $("flips").textContent = String(flips.length);
     const warn = $("warn");
     if (!inZone && !fainted) {
       warn.classList.add("show");
@@ -437,6 +438,7 @@ export function mount(root: HTMLElement, data: MapData, opts: MountOptions = {})
     $("autoBtn").setAttribute("aria-pressed", String(autopilot));
     $("autoSub").textContent = autopilot ? "Goose tours your zone" : "Drag the goose or use the arrow keys";
     $("smoothBtn").setAttribute("aria-pressed", String(tracker.smoothing));
+    $("smoothSub").textContent = tracker.smoothing ? "On: median + moving-average filter" : "Off: raw fixes, watch Gus twitch";
     $("followBtn").setAttribute("aria-pressed", String(follow));
   }
 
@@ -549,6 +551,7 @@ export function mount(root: HTMLElement, data: MapData, opts: MountOptions = {})
     }
   };
   window.addEventListener("keydown", onKey(true));
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape") dismissIntro(); });
   window.addEventListener("keyup", onKey(false));
   window.addEventListener("blur", () => keys.clear());
   window.addEventListener("resize", () => setView(view));
@@ -561,6 +564,7 @@ export function mount(root: HTMLElement, data: MapData, opts: MountOptions = {})
     if (act === "help") $("about").classList.add("show");
     if (act === "layers") $("layers").classList.toggle("show");
     if (act === "close") el.closest(".gt-modal")?.classList.remove("show");
+    if (act === "introClose") dismissIntro();
     if (act === "pickTab") { pickerTab = el.dataset.tab as "city" | "street"; renderPicker(pickerTab); }
     if (act === "pick") { setZone({ kind: el.dataset.kind as "city" | "street", id: el.dataset.id! }); $("picker").classList.remove("show"); }
     if (act === "auto") { autopilot = !autopilot; legs = []; legWait = 0; syncButtons(); }
@@ -595,6 +599,19 @@ export function mount(root: HTMLElement, data: MapData, opts: MountOptions = {})
           <span class="gt-swatch" style="background:var(--gt-gold)"></span><b>${esc(s.name)}</b><small>${esc(s.desc)}</small></button>`).join("");
   }
 
+  // ---------------- intro card (first visit only) ----------------
+  function showIntroIfNew() {
+    let seen = false;
+    try { seen = localStorage.getItem(INTRO_KEY) === "1"; } catch { /* storage unavailable: show it */ }
+    if (!seen) $("intro").classList.add("show");
+  }
+  function dismissIntro() {
+    const intro = $("intro");
+    if (!intro.classList.contains("show")) return;
+    intro.classList.remove("show");
+    try { localStorage.setItem(INTRO_KEY, "1"); } catch { /* storage unavailable */ }
+  }
+
   // ---------------- persistence ----------------
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify({ claimed: [...claimed], visits, zone: { kind: zone.kind, id: zone.id } } satisfies SavedState)); } catch { /* storage unavailable */ }
@@ -602,7 +619,7 @@ export function mount(root: HTMLElement, data: MapData, opts: MountOptions = {})
 
   // ---------------- start ----------------
   for (const t of world.territories) { updateBadge(t.id); if (claimed.has(t.id)) terrEls.get(t.id)?.classList.add("is-claimed"); }
-  drawZone(); renderCities(); syncButtons(); renderList();
+  drawZone(); renderCities(); syncButtons(); renderList(); showIntroIfNew();
   requestAnimationFrame(() => {
     fit(svg.clientWidth > 1100 ? world.bbox : zone.bbox);
     log(`Goose landed in ${zone.name}`, "zone");
@@ -722,8 +739,11 @@ function template(world: World) {
   </section>
 
   <div class="gt-br">
-    <button class="gt-panel gt-toggle" data-act="smooth" data-ref="smoothBtn" aria-pressed="true">
-      <span class="gt-switch"></span><span><b>GPS smoothing</b><small data-ref="flips"></small></span></button>
+    <button class="gt-panel gt-toggle gt-toggle-hero" data-act="smooth" data-ref="smoothBtn" aria-pressed="true"
+      title="Median filter + moving average on every GPS fix, and a new pose must hold for 3 fixes. Turn it off to see raw GPS.">
+      <span class="gt-switch"></span><span><span class="gt-eyebrow">Under the hood</span><b>GPS smoothing</b>
+      <small data-ref="smoothSub"></small>
+      <small class="gt-flips"><span data-ref="flips">0</span> pose or border flips per minute</small></span></button>
     <button class="gt-panel gt-toggle" data-act="auto" data-ref="autoBtn" aria-pressed="true">
       <span class="gt-switch"></span><span><b>Autopilot</b><small data-ref="autoSub"></small></span></button>
     <button class="gt-panel gt-toggle" data-act="follow" data-ref="followBtn" aria-pressed="false">
@@ -735,6 +755,21 @@ function template(world: World) {
     </div>
   </div>
   <div class="gt-warn" data-ref="warn" role="status"></div>
+
+  <section class="gt-panel gt-intro" data-ref="intro" role="region" aria-label="Welcome to Goose Turf">
+    <button class="gt-iconbtn gt-close" data-act="introClose" aria-label="Dismiss intro">${ICONS.close}</button>
+    <div class="gt-intro-art">${gooseSvg("stand")}</div>
+    <div>
+      <h2>Keep Gus on his turf</h2>
+      <p>Gus the goose roams Kitchener, Waterloo and Cambridge, and loses health if he strays outside his home zone for too long.
+        Park him in a neighbourhood for ${CLAIM_AFTER_S} game minutes to claim it, and try to claim every one.</p>
+      <p class="gt-intro-tip">Then switch off <b>GPS smoothing</b> (bottom right) to see the noisy raw GPS it cleans up.</p>
+      <div class="gt-intro-actions">
+        <button class="gt-primary" data-act="introClose">Let's go</button>
+        <small>Drag Gus or use the arrow keys.</small>
+      </div>
+    </div>
+  </section>
 
   <div class="gt-modal" data-ref="picker" role="dialog" aria-label="Choose home zone">
     <div class="gt-panel gt-card">
