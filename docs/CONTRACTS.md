@@ -33,6 +33,17 @@ Response, same order and length:
 `GET /health` returns `ok`. Must give the same answer as `territoryAt()` in `web/src/game/engine.ts`
 (the Rust test `index_matches_brute_force` and the shared projection constants guard this).
 
+`GET /v1/stats` (additive, read-only, for dashboards and load tests) returns counters since the engine started:
+
+```json
+{ "requests": 1, "lookups": 3, "total_lookup_ns": 3196, "avg_lookup_ns": 1065.33 }
+```
+
+`requests` = `/v1/locate` calls; `lookups` = points looked up (one per `[lon, lat]`);
+`total_lookup_ns` = time in the per-batch lookup loop, including building the response rows but not
+JSON parsing/serialization or network; `avg_lookup_ns` = `total_lookup_ns / lookups` (0 before any lookup).
+Counters reset on restart; they are read without a lock, so a snapshot can be off by one in-flight batch.
+
 ## 3. API `POST /v1/track` (owner: api, caller: web)
 
 Request:

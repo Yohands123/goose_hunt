@@ -2,8 +2,11 @@
 
 You own this folder. Polygon geofence lookups, served over HTTP, plus a benchmark.
 
-- `src/lib.rs`: projection, `Polygon`, `GeofenceIndex` (uniform grid of cells → candidate polygons).
-- `src/main.rs`: axum server, `POST /v1/locate`, `GET /health`. Port from `PORT` (7070), data from `MAP_DATA`.
+- `src/lib.rs`: projection, `Polygon`, `GeofenceIndex` (uniform grid of cells → candidate polygons),
+  `LookupStats` (atomic counters behind `/v1/stats`).
+- `src/main.rs`: axum server, `POST /v1/locate`, `GET /v1/stats`, `GET /health`. Port from `PORT` (7070), data from `MAP_DATA`.
+  `/v1/stats` counts per point and times per batch (one `Instant` + three relaxed atomic adds per request, never per point);
+  see `docs/CONTRACTS.md` §2 for what each number means.
 - `src/bin/bench.rs`: 24 neighbourhoods + a 75 m geofence per bus stop (~1,500 total), indexed vs brute force.
 
 ## Checks (run before finishing)
