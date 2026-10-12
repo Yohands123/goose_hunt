@@ -4,8 +4,10 @@
 //! bounding box touches it. A lookup hashes the point to its cell, then runs the
 //! exact point-in-polygon test only on those few candidates.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 const LAT0: f64 = 43.43;
 const LON0: f64 = -80.45;
@@ -121,9 +123,73 @@ impl GeofenceIndex {
     }
 }
 
+/// Running totals for `/v1/locate`, shared by every request without a lock.
+///
+/// Each request batch adds once to each counter (three relaxed atomic adds),
+/// so the lookup loop itself is untouched. Counters are read independently, so a
+/// snapshot taken while a batch is being recorded may be off by that one batch.
+#[derive(Default)]
+pub struct LookupStats {
+    requests: AtomicU64,
+    lookups: AtomicU64,
+    lookup_ns: AtomicU64,
+}
+
+/// A point-in-time copy of `LookupStats`, as served by `GET /v1/stats`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct StatsSnapshot {
+    /// `/v1/locate` requests served since start.
+    pub requests: u64,
+    /// Points looked up since start (one per `[lon, lat]` in each request).
+    pub lookups: u64,
+    /// Wall time spent in the lookup loop, summed over all batches, in nanoseconds.
+    pub total_lookup_ns: u64,
+    /// `total_lookup_ns / lookups`: mean time per point, in nanoseconds (0 before any lookup).
+    pub avg_lookup_ns: f64,
+}
+
+impl LookupStats {
+    /// Record one batch: `points` lookups that together took `elapsed`.
+    pub fn record_batch(&self, points: usize, elapsed: Duration) {
+        let ns = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
+        self.requests.fetch_add(1, Ordering::Relaxed);
+        self.lookups.fetch_add(points as u64, Ordering::Relaxed);
+        self.lookup_ns.fetch_add(ns, Ordering::Relaxed);
+    }
+
+    pub fn snapshot(&self) -> StatsSnapshot {
+        let requests = self.requests.load(Ordering::Relaxed);
+        let lookups = self.lookups.load(Ordering::Relaxed);
+        let total_lookup_ns = self.lookup_ns.load(Ordering::Relaxed);
+        let avg_lookup_ns = if lookups == 0 { 0.0 } else { total_lookup_ns as f64 / lookups as f64 };
+        StatsSnapshot { requests, lookups, total_lookup_ns, avg_lookup_ns }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stats_count_points_and_average_time_per_point() {
+        let s = LookupStats::default();
+        assert_eq!(s.snapshot(), StatsSnapshot { requests: 0, lookups: 0, total_lookup_ns: 0, avg_lookup_ns: 0.0 });
+        s.record_batch(3, Duration::from_nanos(900));
+        s.record_batch(1, Duration::from_nanos(300));
+        s.record_batch(0, Duration::from_nanos(0)); // an empty batch is a request but no lookups
+        assert_eq!(s.snapshot(), StatsSnapshot { requests: 3, lookups: 4, total_lookup_ns: 1200, avg_lookup_ns: 300.0 });
+    }
+    #[test]
+    fn stats_are_safe_to_update_from_many_threads() {
+        let s = std::sync::Arc::new(LookupStats::default());
+        let handles: Vec<_> = (0..8).map(|_| {
+            let s = s.clone();
+            std::thread::spawn(move || for _ in 0..1000 { s.record_batch(2, Duration::from_nanos(10)); })
+        }).collect();
+        for h in handles { h.join().unwrap(); }
+        let snap = s.snapshot();
+        assert_eq!((snap.requests, snap.lookups, snap.total_lookup_ns), (8000, 16_000, 80_000));
+        assert_eq!(snap.avg_lookup_ns, 5.0);
+    }
     fn idx() -> GeofenceIndex {
         GeofenceIndex::from_json(&std::fs::read_to_string("../data/kwc.json").unwrap(), 1000.0).unwrap()
     }
