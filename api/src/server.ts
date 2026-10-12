@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import { openStores } from "./stores";
 import { engineKind, locateBatch } from "./locate";
-import { applyHits, smooth, type TrackRequest } from "./track";
+import { applyHits, freshFixes, smooth, type TrackRequest } from "./track";
 import { mapData, world } from "./shared";
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "warn" } });
@@ -38,11 +38,8 @@ app.post<{ Body: TrackRequest }>("/v1/track", { schema: trackSchema }, async (re
   const body = req.body;
   const known = body.zone.kind === "city" ? world.cities.some((c) => c.id === body.zone.id) : world.streets.some((s) => s.id === body.zone.id);
   if (!known) return reply.code(400).send({ error: `Unknown ${body.zone.kind} zone "${body.zone.id}". GET /v1/geofences lists the territories.` });
-  body.fixes.sort((a, b) => a.t - b.t);
-
   const prev = await devices.get(body.deviceId);
-  // fixes older than what we've already processed can't be applied (GPS buffers sometimes resend)
-  if (prev && prev.zone.id === body.zone.id) body.fixes = body.fixes.filter((f) => f.t > prev.lastT);
+  body.fixes = freshFixes(prev, body);
   if (!body.fixes.length) return { events: [], device: null, latencyMs: 0, note: "All fixes were older than the last processed fix." };
   const sm = smooth(prev, body);
   const hits = await locateBatch(sm.points);
